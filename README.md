@@ -4,6 +4,11 @@ OrderFlow is an event-driven microservices order management platform built with 
 
 It demonstrates a real backend interview story: a synchronous order-to-inventory flow was replaced with asynchronous Kafka events so services can scale and fail independently.
 
+## Links
+
+- Live Vercel console: [https://orderflow-console-surya.vercel.app](https://orderflow-console-surya.vercel.app)
+- Local Docker console: [http://localhost:5173](http://localhost:5173)
+
 ## Architecture
 
 ```text
@@ -300,6 +305,10 @@ This repository is ready to publish as a standalone project. The `.gitignore` ex
 ### Vercel
 
 Vercel hosts the React console from `frontend/`. The deployed console uses `VITE_DEMO_MODE=true` so visitors can click through the order workflow without needing local Docker services.
+
+Live demo:
+
+[https://orderflow-console-surya.vercel.app](https://orderflow-console-surya.vercel.app)
 
 The complete backend stack runs through Docker Compose or any container platform that supports Java services, Kafka, Redis, and MySQL.
 
