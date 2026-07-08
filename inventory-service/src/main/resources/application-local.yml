@@ -1,0 +1,12 @@
+inventory:
+  events:
+    publish: false
+
+spring:
+  cache:
+    type: simple
+
+management:
+  health:
+    redis:
+      enabled: false
