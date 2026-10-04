@@ -1,329 +1,116 @@
 # OrderFlow
 
-OrderFlow is an event-driven microservices order management platform built with Java, Spring Boot, Spring Cloud, Kafka, Redis, MySQL, Eureka, API Gateway, Prometheus, Grafana, Docker, and React.
+A local-first event-driven order workflow built with Spring Boot services, Kafka, Redis, MySQL, and a React console. It demonstrates how an order moves through asynchronous inventory validation and status updates.
 
-It demonstrates a real backend interview story: a synchronous order-to-inventory flow was replaced with asynchronous Kafka events so services can scale and fail independently.
+**Console preview:** [orderflow-console-surya.vercel.app](https://orderflow-console-surya.vercel.app/)
 
-## Links
+> The Vercel console uses demo mode. The backend is intended to run locally with Docker Compose; no public production backend is claimed. The demo token endpoint accepts caller-supplied identity and role, so this sample backend must not be exposed to untrusted networks.
 
-- Live Vercel console: [https://orderflow-console-surya.vercel.app](https://orderflow-console-surya.vercel.app)
-- Local Docker console: [http://localhost:5173](http://localhost:5173)
+## Workflow
+
+1. The client submits an order through the API Gateway.
+2. Order Service stores the order as `PENDING` and publishes `orders.placed`.
+3. Inventory Service consumes the event, checks stock, updates inventory, and publishes `inventory.updated`.
+4. Order Service consumes the result and sets the order to `CONFIRMED` or `FAILED`.
+5. Notification Service consumes order and low-stock events and logs notification activity.
 
 ## Architecture
 
-```text
-React Console
-  |
-  v
-API Gateway :8080
-  |-- JWT validation
-  |-- Redis-backed rate limiting
-  |-- Circuit breaker fallbacks
-  |
-  +-- /api/orders/**     -> order-service :8081
-  +-- /api/inventory/**  -> inventory-service :8082
-
-Eureka Server :8761
-  |
-  +-- service discovery for gateway and services
-
-Kafka
-  |
-  +-- orders.placed
-  +-- inventory.updated
-  +-- inventory.low-stock
-  +-- orders.placed.DLQ
-
-order-service
-  |-- own database: order_db
-  |-- saves orders as PENDING
-  |-- publishes orders.placed
-  |-- consumes inventory.updated
-
-inventory-service
-  |-- own database: inventory_db
-  |-- consumes orders.placed
-  |-- decrements stock
-  |-- Redis cache-aside for product lookup
-  |-- publishes inventory.updated and inventory.low-stock
-
-notification-service
-  |-- consumes order and inventory events
-  |-- logs customer notifications and low-stock alerts
-
-Prometheus + Grafana
-  |-- scrape /actuator/prometheus from every service
+```mermaid
+flowchart LR
+  UI[React console] --> GW[API Gateway]
+  GW --> OS[Order Service]
+  GW --> IS[Inventory Service]
+  ES[Eureka] -. discovery .-> GW
+  ES -. discovery .-> OS
+  ES -. discovery .-> IS
+  OS --> ODB[(order_db)]
+  IS --> IDB[(inventory_db)]
+  OS --> K[Kafka]
+  IS --> K
+  NS[Notification Service] --> K
+  IS --> R[(Redis cache)]
+  P[Prometheus] --> OS
+  P --> IS
+  P --> GW
+  G[Grafana] --> P
 ```
 
-## Tech Stack
+## Components
 
-| Area | Technology |
-| --- | --- |
-| Backend | Java 17, Spring Boot 3.3, Spring MVC/WebFlux |
-| Microservices | Spring Cloud Gateway, Eureka Discovery |
-| Messaging | Apache Kafka, Spring Kafka |
-| Persistence | MySQL, H2 local defaults, Spring Data JPA, Hibernate |
-| Cache | Redis, Spring Cache |
-| Security | Gateway JWT validation, user context headers |
-| Resilience | Gateway circuit breakers, Kafka retry + DLQ |
-| Observability | Spring Actuator, Micrometer, Prometheus, Grafana |
-| Frontend | React, Vite, CSS |
-| Testing | JUnit 5, Mockito |
-| DevOps | Docker Compose, Dockerfiles, GitHub Actions |
+| Component | Port | Responsibility |
+|---|---:|---|
+| API Gateway | 8080 | Routes order/inventory requests; demo JWT validation, rate limiting, and fallback responses |
+| Eureka | 8761 | Service discovery |
+| Order Service | 8081 | Creates orders and applies inventory results |
+| Inventory Service | 8082 | Validates and updates stock; uses Redis cache-aside reads |
+| Notification Service | 8083 | Consumes events and logs demo notifications |
+| Kafka | 9092 | Carries order and inventory events |
+| Prometheus / Grafana | 9090 / 3000 | Local metrics collection and dashboards |
+| React console | 5173 | Local workflow UI |
 
-## Services
+## Technology
 
-| Service | Port | Purpose |
-| --- | --- | --- |
-| Eureka Server | `8761` | Service registry |
-| API Gateway | `8080` | Routing, JWT, rate limiting, circuit breakers |
-| Order Service | `8081` | Order lifecycle and order status |
-| Inventory Service | `8082` | Product stock, Redis cache, inventory events |
-| Notification Service | `8083` | Event-driven notifications and alerts |
-| Frontend | `5173` | Demo console |
-| Prometheus | `9090` | Metrics |
-| Grafana | `3000` | Dashboards |
+Java 17, Spring Boot 3.3, Spring Cloud Gateway, Eureka, Kafka, Redis, MySQL, Spring Data JPA, Actuator, Micrometer, Prometheus, Grafana, React, Vite, Docker Compose, JUnit 5, and Mockito.
 
-## Run With Docker
+## Run locally
+
+Copy the local example file, change the sample values, then start the stack:
 
 ```powershell
-cd orderflow
-docker compose up -d
+Copy-Item .env.example .env
+docker compose up --build
 ```
 
-This starts Eureka, API Gateway, Order Service, Inventory Service, Notification Service, React frontend, MySQL for each service, Apache Kafka in KRaft mode, Redis, Prometheus, and Grafana.
+Open the console at `http://localhost:5173`. Prometheus is at `http://localhost:9090`; Grafana is at `http://localhost:3000`. The local Grafana password comes from `.env`.
 
-Open the console:
-
-```text
-http://localhost:5173
-```
-
-Check containers:
-
-```powershell
-docker compose ps
-```
-
-Stop the stack:
+To stop the services:
 
 ```powershell
 docker compose down
 ```
 
-Grafana login:
+The Compose values are local development settings only. Never reuse them for a public service. The `/api/auth/token` endpoint issues demo JWTs from caller-provided fields and is not a production authentication design.
 
-```text
-admin / admin
-```
+## Try the API locally
 
-## Run Backend Services
+The console uses `POST /api/auth/token` to request a demo token, then calls `GET /api/inventory/{id}` and `POST /api/orders`. An order normally remains `PENDING` briefly before Kafka processing changes it to `CONFIRMED` or `FAILED`. If it stays pending, inspect the order-service and inventory-service logs and check that Kafka is healthy.
 
-Start each service in a separate terminal:
+## Observability and failure handling
 
-```powershell
-cd orderflow
-..\mvnw.cmd -pl eureka-server spring-boot:run
-..\mvnw.cmd -pl inventory-service spring-boot:run
-..\mvnw.cmd -pl order-service spring-boot:run
-..\mvnw.cmd -pl notification-service spring-boot:run
-..\mvnw.cmd -pl api-gateway spring-boot:run
-```
+- Services expose `/actuator/health` and `/actuator/prometheus` for local monitoring.
+- Gateway circuit breakers return fallback responses when downstream services are unavailable.
+- Kafka consumers use retry handling and a dead-letter topic for failed order events.
+- Inventory cache entries are evicted after stock updates.
 
-Open Eureka:
-
-```text
-http://localhost:8761
-```
-
-## Run Frontend
+## Verification
 
 ```powershell
-cd orderflow/frontend
-npm install
-npm run dev
-```
-
-Open:
-
-```text
-http://localhost:5173
-```
-
-Set the gateway URL if needed:
-
-```powershell
-$env:VITE_API_URL="http://localhost:8080"
-npm run dev
-```
-
-For a static Vercel demo build:
-
-```powershell
-$env:VITE_DEMO_MODE="true"
+.\mvnw.cmd test
+cd frontend
+npm ci
 npm run build
 ```
 
-## Demo Flow
+GitHub Actions runs the Maven test suite. The current automated tests are focused service-level tests; the repository does not claim end-to-end coverage for every infrastructure component.
 
-Issue a demo JWT:
+## Troubleshooting
 
-```powershell
-$tokenResponse = Invoke-RestMethod `
-  -Uri "http://localhost:8080/api/auth/token" `
-  -Method Post `
-  -ContentType "application/json" `
-  -Body '{
-    "userId": "surya-demo",
-    "email": "surya@example.com",
-    "role": "CUSTOMER"
-  }'
+- **Order stays `PENDING`:** check Kafka broker health, topic/consumer startup, and service logs.
+- **Gateway returns fallback JSON:** check Eureka registration and the target service health endpoint.
+- **Rate limiting or cache behavior fails:** confirm Redis is reachable and the gateway/inventory services have the expected Redis host.
+- **Port conflict:** adjust the corresponding Compose host port before starting the stack.
+- **Grafana sign-in fails:** use the local credentials you set in `.env`; do not rely on public default credentials.
 
-$token = $tokenResponse.accessToken
-```
-
-Check product stock:
-
-```powershell
-Invoke-RestMethod `
-  -Uri "http://localhost:8080/api/inventory/1" `
-  -Headers @{ Authorization = "Bearer $token" }
-```
-
-Place an order:
-
-```powershell
-$order = Invoke-RestMethod `
-  -Uri "http://localhost:8080/api/orders" `
-  -Method Post `
-  -ContentType "application/json" `
-  -Headers @{ Authorization = "Bearer $token" } `
-  -Body '{
-    "customerEmail": "customer@example.com",
-    "items": [
-      { "productId": 1, "quantity": 2 }
-    ]
-  }'
-```
-
-Immediately after creation, the order is usually:
+## Project structure
 
 ```text
-PENDING
+api-gateway/ inventory-service/ order-service/ notification-service/ eureka-server/
+common-events/ frontend/ observability/prometheus/ docker-compose.yml
 ```
 
-After Kafka processing:
+## Next engineering steps
 
-```powershell
-Invoke-RestMethod `
-  -Uri "http://localhost:8080/api/orders/$($order.id)" `
-  -Headers @{ Authorization = "Bearer $token" }
-```
-
-Expected status:
-
-```text
-CONFIRMED
-```
-
-If stock is insufficient, Inventory Service publishes a failed `inventory.updated` event and Order Service marks the order:
-
-```text
-FAILED
-```
-
-## What Happens When An Order Is Placed
-
-1. Client sends `POST /api/orders` through the API Gateway.
-2. Gateway validates the JWT and applies Redis-backed rate limiting.
-3. Order Service saves the order as `PENDING`.
-4. Order Service publishes `orders.placed`.
-5. Inventory Service consumes `orders.placed`.
-6. Inventory Service validates stock, decrements stock, evicts product cache, and publishes `inventory.updated`.
-7. If stock falls below threshold, Inventory Service publishes `inventory.low-stock`.
-8. Order Service consumes `inventory.updated` and changes order status to `CONFIRMED` or `FAILED`.
-9. Notification Service consumes events and logs customer/alert notifications.
-10. Prometheus scrapes metrics and Grafana visualizes system health.
-
-## Resilience Features
-
-- Gateway circuit breakers return fallback JSON when downstream services are unavailable.
-- Kafka consumers use retry with fixed backoff.
-- Failed Kafka records are recoverable through `orders.placed.DLQ`.
-- Gateway rate limiting is backed by Redis.
-- Inventory uses cache-aside reads for product lookup and evicts cache after stock changes.
-
-## Observability
-
-Every backend service exposes:
-
-```text
-/actuator/health
-/actuator/prometheus
-```
-
-Prometheus config:
-
-[observability/prometheus/prometheus.yml](observability/prometheus/prometheus.yml)
-
-Suggested Grafana panels:
-
-- HTTP request latency per service
-- Request rate per endpoint
-- Kafka listener throughput
-- JVM memory usage
-- Order creation throughput
-- Inventory cache hit/miss ratio
-
-## Build And Test
-
-```powershell
-cd orderflow
-..\mvnw.cmd test
-```
-
-Frontend:
-
-```powershell
-cd orderflow/frontend
-npm install
-npm run build
-```
-
-## CI
-
-GitHub Actions runs Maven tests for all backend modules:
-
-[.github/workflows/ci.yml](.github/workflows/ci.yml)
-
-## Deployment
-
-### GitHub
-
-This repository is ready to publish as a standalone project. The `.gitignore` excludes generated build output, logs, local environment files, and dependencies, while GitHub Actions runs the Maven test suite on every push and pull request.
-
-### Vercel
-
-Vercel hosts the React console from `frontend/`. The deployed console uses `VITE_DEMO_MODE=true` so visitors can click through the order workflow without needing local Docker services.
-
-Live demo:
-
-[https://orderflow-console-surya.vercel.app](https://orderflow-console-surya.vercel.app)
-
-The complete backend stack runs through Docker Compose or any container platform that supports Java services, Kafka, Redis, and MySQL.
-
-## Resume Bullets
-
-- Architected OrderFlow, an event-driven microservices order management platform with Spring Boot, Spring Cloud Gateway, Eureka, Kafka, Redis, MySQL, Docker, and React.
-- Implemented asynchronous order processing using Kafka topics `orders.placed`, `inventory.updated`, and `inventory.low-stock`, decoupling Order, Inventory, and Notification services.
-- Added centralized JWT validation, user context propagation, Redis-backed rate limiting, gateway circuit breaker fallbacks, and Docker Compose orchestration.
-- Implemented Redis cache-aside inventory lookup with cache eviction after stock updates.
-- Added Kafka retry and dead-letter queue handling for resilient event consumption.
-- Integrated Prometheus and Grafana observability using Spring Actuator and Micrometer metrics.
-- Added a Vercel-deployed React console with a safe demo mode plus a local Docker mode connected to the real gateway.
-
-## Interview Explanation
-
-The key story is the before/after improvement. The first version placed an order by synchronously calling Inventory Service. That was simple, but tightly coupled: if Inventory was down, Order could not proceed, and Order had to wait for Inventory.
-
-The final version uses Kafka. Order Service saves the order as `PENDING` and publishes `orders.placed`. Inventory Service consumes the event, updates stock in its own database, and publishes `inventory.updated`. Order Service consumes that result and marks the order `CONFIRMED` or `FAILED`. This makes the system more scalable, fault-tolerant, and closer to real production architecture.
+- Restrict or replace the demo token endpoint before any public backend deployment.
+- Add integration tests covering Kafka delivery, retries, and dead-letter handling.
+- Evaluate an outbox pattern for reliable event publication.

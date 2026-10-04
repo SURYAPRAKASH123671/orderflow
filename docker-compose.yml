@@ -16,7 +16,7 @@ services:
     environment:
       EUREKA_URL: http://eureka-server:8761/eureka/
       REDIS_HOST: redis
-      JWT_SECRET: orderflow-local-development-secret-change-before-production
+      JWT_SECRET: ${ORDERFLOW_JWT_SECRET:?Copy .env.example to .env and set ORDERFLOW_JWT_SECRET}
     ports:
       - "8080:8080"
 
@@ -30,8 +30,8 @@ services:
       - kafka
     environment:
       DB_URL: jdbc:mysql://mysql-order:3306/order_db
-      DB_USERNAME: orderflow
-      DB_PASSWORD: orderflow
+      DB_USERNAME: ${ORDERFLOW_DB_USERNAME:?Set ORDERFLOW_DB_USERNAME in .env}
+      DB_PASSWORD: ${ORDERFLOW_DB_PASSWORD:?Set ORDERFLOW_DB_PASSWORD in .env}
       JPA_DDL_AUTO: update
       EUREKA_URL: http://eureka-server:8761/eureka/
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -49,8 +49,8 @@ services:
       - redis
     environment:
       DB_URL: jdbc:mysql://mysql-inventory:3306/inventory_db
-      DB_USERNAME: orderflow
-      DB_PASSWORD: orderflow
+      DB_USERNAME: ${ORDERFLOW_DB_USERNAME:?Set ORDERFLOW_DB_USERNAME in .env}
+      DB_PASSWORD: ${ORDERFLOW_DB_PASSWORD:?Set ORDERFLOW_DB_PASSWORD in .env}
       JPA_DDL_AUTO: update
       CACHE_TYPE: redis
       REDIS_HOST: redis
@@ -86,9 +86,9 @@ services:
     container_name: orderflow-mysql-order
     environment:
       MYSQL_DATABASE: order_db
-      MYSQL_USER: orderflow
-      MYSQL_PASSWORD: orderflow
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: ${ORDERFLOW_DB_USERNAME:?Set ORDERFLOW_DB_USERNAME in .env}
+      MYSQL_PASSWORD: ${ORDERFLOW_DB_PASSWORD:?Set ORDERFLOW_DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${ORDERFLOW_MYSQL_ROOT_PASSWORD:?Set ORDERFLOW_MYSQL_ROOT_PASSWORD in .env}
     volumes:
       - order_db_data:/var/lib/mysql
 
@@ -97,9 +97,9 @@ services:
     container_name: orderflow-mysql-inventory
     environment:
       MYSQL_DATABASE: inventory_db
-      MYSQL_USER: orderflow
-      MYSQL_PASSWORD: orderflow
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: ${ORDERFLOW_DB_USERNAME:?Set ORDERFLOW_DB_USERNAME in .env}
+      MYSQL_PASSWORD: ${ORDERFLOW_DB_PASSWORD:?Set ORDERFLOW_DB_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${ORDERFLOW_MYSQL_ROOT_PASSWORD:?Set ORDERFLOW_MYSQL_ROOT_PASSWORD in .env}
     volumes:
       - inventory_db_data:/var/lib/mysql
 
@@ -143,8 +143,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?Set GRAFANA_ADMIN_USER in .env}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
 
 volumes:
   order_db_data:
